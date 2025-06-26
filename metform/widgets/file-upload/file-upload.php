@@ -11,6 +11,10 @@ Class MetForm_Input_File_Upload extends Widget_base{
     public function get_name() {
 		return 'mf-file-upload';
     }
+
+	public function get_icon() {
+		return 'mf-widget-icon icon-metform_file_upload';
+	}
     
 	public function get_title() {
 		return esc_html__( 'File Upload', 'metform' );
@@ -19,6 +23,10 @@ Class MetForm_Input_File_Upload extends Widget_base{
     public function show_in_panel() {
         return 'metform-form' == get_post_type();
     }
+
+	public function has_widget_inner_wrapper(): bool {
+		return ! Plugin::$instance->experiments->is_feature_active('e_optimized_markup');
+	}
     
     public function get_categories() {
 		return [ 'metform' ];

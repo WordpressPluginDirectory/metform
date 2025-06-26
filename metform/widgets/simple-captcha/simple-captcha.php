@@ -17,10 +17,18 @@ Class MetForm_Input_Simple_Captcha extends Widget_Base{
     public function get_name() {
 		return 'mf-simple-captcha';
     }
+
+	public function get_icon() {
+		return 'mf-widget-icon icon-metform_simple_captcha';
+	}
     
 	public function get_title() {
 		return esc_html__( 'Simple Captcha', 'metform' );
     }
+
+	public function has_widget_inner_wrapper(): bool {
+		return ! Plugin::$instance->experiments->is_feature_active('e_optimized_markup');
+	}
 
 	public function show_in_panel() {
         return 'metform-form' == get_post_type();

@@ -12,8 +12,16 @@ Class MetForm_Input_Number extends Widget_Base{
         return 'mf-number';
     }
 
+	public function get_icon(){
+		return 'mf-widget-icon icon-metform_number';
+	}
+	
     public function get_title(){
         return esc_html__( 'Number', 'metform' );
+	}
+
+	public function has_widget_inner_wrapper(): bool {
+		return ! Plugin::$instance->experiments->is_feature_active('e_optimized_markup');
 	}
 	
 	public function show_in_panel() {

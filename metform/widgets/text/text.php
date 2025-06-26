@@ -13,8 +13,16 @@ Class MetForm_Input_Text extends Widget_Base{
 		return 'mf-text';
     }
 
+	public function get_icon() {
+		return 'mf-widget-icon icon-metform_text';
+	}
+
 	public function get_title() {
 		return esc_html__( 'Text', 'metform' );
+	}
+
+	public function has_widget_inner_wrapper(): bool {
+		return ! Plugin::$instance->experiments->is_feature_active('e_optimized_markup');
 	}
 
 	public function show_in_panel() {

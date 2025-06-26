@@ -11,9 +11,17 @@ Class MetForm_Input_Gdpr_Consent extends Widget_Base{
     public function get_name() {
 		return 'mf-gdpr-consent';
     }
+
+	public function get_icon() {
+		return 'mf-widget-icon icon-metform_gdpr_consent';
+	}
     
 	public function get_title() {
 		return esc_html__( 'GDPR Consent', 'metform' );
+	}
+
+	public function has_widget_inner_wrapper(): bool {
+		return ! Plugin::$instance->experiments->is_feature_active('e_optimized_markup');
 	}
 	
 	public function show_in_panel() {

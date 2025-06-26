@@ -11,11 +11,19 @@ Class MetForm_Input_Listing_Lname extends Widget_Base{
     public function get_name() {
 		return 'mf-listing-lname';
     }
+
+	public function get_icon() {
+		return 'mf-widget-icon icon-metform_last_name';
+	}
     
 	public function get_title() {
 		return esc_html__( 'Last Name (Listing)', 'metform' );
 	}
 	
+	public function has_widget_inner_wrapper(): bool {
+		return ! Plugin::$instance->experiments->is_feature_active('e_optimized_markup');
+	}
+
 	public function show_in_panel() {
         return 'metform-form' == get_post_type();
 	}
