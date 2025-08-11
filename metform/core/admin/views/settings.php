@@ -76,7 +76,7 @@ if (!function_exists('mf_dummy_checkbox_input')) {
 		<div class="attr-col-lg-3 attr-col-sm-4 mf-setting-sidebar-column">
 			<div class="mf-setting-sidebar">
 				<div class="mf_setting_logo">
-					<img src="<?php echo esc_url(plugin_dir_url(__FILE__) . '../images/metform_logo.png'); ?>">
+					<img src="<?php echo esc_url(plugin_dir_url(__FILE__) . '../images/metform-logo.svg'); ?>">
 				</div>
 				<div class="mf-settings-tab">
 					<ul class="nav-tab-wrapper">
@@ -360,7 +360,7 @@ if (!function_exists('mf_dummy_checkbox_input')) {
 												<h2>Easy Documentation</h2>
 												<span class="ekit-admin-right-content--heading__sub-title">Docs</span>
 											</div>
-											<p>Get started by spending some time with the documentation to get familiar with MetForm. Build awesome forms for you or your clients with ease.</p>
+											<p>Check out the docs and start building awesome forms with MetForm!</p>
 											<div class="ekit-admin-right-content--button">
 												<a target="_blank" href="https://wpmet.com/doc/metform/" class="attr-btn attr-btn-primary ekit-admin-right-content--link"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="14" viewBox="0 0 12 14" fill="none">
 														<path d="M3.5 10.125H8.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -592,7 +592,7 @@ if (!function_exists('mf_dummy_checkbox_input')) {
 													</p>
 												</div>
 												<div class="info-list">
-													<div class="attr-row" style="margin-top:18px">
+													<div class="attr-row">
 														<div class="attr-col-lg-12">
 															<div class="mf-setting-input-group">
 																<label class="mf-setting-label mf-setting-switch">
@@ -632,13 +632,19 @@ if (!function_exists('mf_dummy_checkbox_input')) {
 
 													<div class="info-list">
 														<?php
-														mf_dummy_checkbox_input('Save Form Progress ?', 'Turn this feature on if you want partial submissions to be saved for a form so that the user can complete the form submission later. Please note that the submissions will be saved for 2 hours, after which the form submissions will be reset.');
+															mf_dummy_checkbox_input(
+																'Save Form Progress ?', 
+																'Turn this feature on if you want partial submissions to be saved for a form so that the user can complete the form submission later. Please note that the submissions will be saved for 2 hours, after which the form submissions will be reset.'
+															);
 														?>
 													</div>
 
 													<div class="info-list">
 														<?php
-														mf_dummy_checkbox_input('Display Input Field Name Alongside Value', 'Turn this feature on if you want the input field title to be shown along with the value. By default, only the value is displayed. This feature works for widgets like radio buttons, multi-select, select, image select, toggle select, checkboxes, and simple repeater.');
+															mf_dummy_checkbox_input(
+																'Display Input Field Name Alongside Value', 
+																'Turn this feature on if you want the input field title to be shown along with the value. By default, only the value is displayed. This feature works for widgets like radio buttons, multi-select, select, image select, toggle select, checkboxes, and simple repeater.'
+															);
 														?>
 													</div>
 												</div>
@@ -875,7 +881,7 @@ if (!function_exists('mf_dummy_checkbox_input')) {
 																			?> value="<?php echo esc_attr($page); ?>"> <?php echo esc_html(get_the_title($page)); ?>
 																	<?php endforeach; ?>
 															</select>
-															<br><br>
+															<!-- <br><br> -->
 															<p class="info-description"><?php echo wp_kses_post(__('Handle successful payment redirection page. Learn more about Thank you page. ', 'metform') . '<a href="https://help.wpmet.com/docs/thank-you-page/" target="_blank">' . __('Here', 'metform') . '</a>'); ?></p>
 															<a class="mf-setting-btn-link btn-link-two" target="_blank" href="<?php echo esc_url(get_admin_url() . 'post-new.php?post_type=page'); ?>"> <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none">
 																	<path d="M6.368 2.265H2.193A1.193 1.193 0 0 0 1 3.458v8.35A1.193 1.193 0 0 0 2.193 13h8.35a1.193 1.193 0 0 0 1.192-1.193V7.633" stroke="#54565C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -919,7 +925,7 @@ if (!function_exists('mf_dummy_checkbox_input')) {
 																			?> value="<?php echo esc_attr($page); ?>"> <?php echo esc_html(get_the_title($page)); ?>
 																	<?php endforeach; ?>
 															</select>
-															<br><br>
+															<!-- <br><br> -->
 															<p class="info-description"><?php esc_html_e('Handle canceled payment redirection page. Learn more about cancel page.', 'metform'); ?></p>
 															<a class="mf-setting-btn-link btn-link-two" href="<?php echo esc_url(get_admin_url() . 'post-new.php?post_type=page'); ?>">
 																<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none">
