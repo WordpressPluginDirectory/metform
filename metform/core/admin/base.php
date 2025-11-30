@@ -25,7 +25,7 @@ class Base {
     public function init(){
         add_action('admin_menu', [$this, 'register_settings'], 999);
         add_action('admin_init', [$this, 'register_actions'], 999);
-        add_action('wp_ajax_metform_admin_settings', [$this, 'mf_setting_data_save']);        
+        add_action('wp_ajax_metform_admin_settings', [$this, 'mf_setting_data_save']);
     }
 
     /**
@@ -171,5 +171,4 @@ class Base {
 
         }
     }
-
 }

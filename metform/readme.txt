@@ -1,9 +1,9 @@
 === MetForm - Contact Form, Survey, Quiz, & Custom Form Builder for Elementor ===
-Contributors: xpeedstudio, ataurr, emranio
+Contributors: Roxnor, Ataurr, aion11
 Tags: form builder, Elementor contact form, contact form builder, Elementor forms builder, custom form
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 4.0.5
+Stable tag: 4.0.8
 Requires PHP: 7.4
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.txt
@@ -243,6 +243,18 @@ If you like using the MetForm form builder, then consider checking out our other
 **Check out** [Tutorials, Tips & Tricks](https://wpmet.com/blog)! 👌
 
 == Changelog ==
+Version: 4.0.8 // 2025-11-30
+Fixed: Conflict issue with ShopEngine plugin.
+
+Version: 4.0.7 // 2025-10-07
+Fixed: Summary widget issue with File upload widget.
+Improved: Form settings admin UI.
+
+Version: 4.0.6 // 2025-08-31
+Improved: File upload widget.
+Fixed: Mailchimp and GetResponse list not appearing in MailChimp and GetResponse Integration settings.
+Fixed: Multi Select value doesn't appear in entries data for image select widget.
+
 Version: 4.0.5 // 2025-08-20
 Fixed: URL/Webhook input field not displaying in REST API integration settings.
 Fixed: Google Sheet list not appearing in Google Sheet integration settings.
