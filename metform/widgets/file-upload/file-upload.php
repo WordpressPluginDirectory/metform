@@ -208,7 +208,11 @@ Class MetForm_Input_File_Upload extends Widget_base{
 					'.zip'  => esc_html__( '.zip', 'metform' ),
 					'.csv'  => esc_html__( '.csv', 'metform' ),
 					'.stp'  => esc_html__( '.stp', 'metform' ),
+					'.step'  => esc_html__( '.step', 'metform' ),
 					'.stl'  => esc_html__( '.stl', 'metform' ),
+					'.webp'  => esc_html__( '.webp', 'metform' ),
+					'.iges'  => esc_html__( '.iges', 'metform' ),
+					'.igs'  => esc_html__( '.igs', 'metform' ),
 				],
                 'default' => [ '.jpg', '.jpeg', '.gif', '.png' ],
 			]
@@ -546,7 +550,9 @@ Class MetForm_Input_File_Upload extends Widget_base{
 									className="mf-file-remove" 
 									onClick=${() => parent.removeUploadedFile('<?php echo esc_attr($mf_input_name); ?>', idx)}
 									title="Remove"
-								>×</span>
+								>
+									<label class="mf-file-cross">×</label>
+								</span>
 							</span>
 						`)
 						: html`<span>${parent.getFileLabel('<?php echo esc_attr($mf_input_name); ?>', '<?php echo esc_html($mf_input_no_file); ?>')}</span>`

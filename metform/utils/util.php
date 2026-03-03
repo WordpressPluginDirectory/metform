@@ -29,7 +29,12 @@ class Util{
 		return ( isset( $data_all[ $key ] ) && $data_all[ $key ] != '' ) ? $data_all[ $key ] : $default;
 	}
 
-	public static function save_settings( $new_data = '' ) {
+	public static function save_settings( $new_data = array() ) {
+		// Ensure $new_data is always an array
+		if ( ! is_array( $new_data ) ) {
+			$new_data = array();
+		}
+		
 		$data_old = self::get_option( 'settings', array() );
 		$data     = array_merge( $data_old, $new_data );
 		return self::save_option( 'settings', $data );
@@ -440,7 +445,31 @@ class Util{
 		$modified = str_replace('<style>','<style key="1">',$content);
 		return str_replace('data-elementor-type="wp-post"','data-elementor-type="wp-post" key="2"',$modified);
 	}
+	/**
+	 * Robust detection for Elementor edit/preview contexts.
+	 * Accounts for editor iframe, preview and request query args.
+	 *
+	 * @return bool
+	 */
+	public static function detect_elementor_edit_context() {
+		try {
+			if ( class_exists( '\\Elementor\\Plugin' ) ) {
+				$plugin = \Elementor\Plugin::instance();
+				// Native editor mode
+				if ( isset( $plugin->editor ) && method_exists( $plugin->editor, 'is_edit_mode' ) && $plugin->editor->is_edit_mode() ) {
+					return true;
+				}
+				// Preview frame inside editor
+				if ( isset( $plugin->preview ) && method_exists( $plugin->preview, 'is_preview_mode' ) && $plugin->preview->is_preview_mode() ) {
+					return true;
+				}
+			}
 
+		} catch ( \Throwable $e ) {
+			// Silently ignore, default false.
+		}
+		return false;
+	}
 	public static function render_form_content($form, $widget_id){
 		$rest_url = get_rest_url();
 		$form_unique_name = (is_numeric($form)) ? ($widget_id.'-'.$form) : $widget_id;
@@ -455,7 +484,27 @@ class Util{
 				$site_key = $form_settings['mf_recaptcha_site_key_v3'];
 			} 
 		}
-				
+
+		// Detect Elementor edit context
+		 $is_edit_mode = self::detect_elementor_edit_context();	
+		if (!$is_edit_mode && isset($form_settings['form_scheduling_status']) && (!empty($form_settings['mf_scheduling_submission_starts']) || !empty($form_settings['mf_scheduling_submission_ends']))) {
+            $current_ts = current_time('timestamp');
+            $start_time = $form_settings['mf_scheduling_submission_starts'] ?? '';
+            $end_time   = $form_settings['mf_scheduling_submission_ends'] ?? '';
+
+            $waiting_message = $form_settings['mf_scheduling_form_waiting_message'] 
+                                ?? 'Form submission has not started yet.';
+            $expired_message = $form_settings['mf_scheduling_form_expired_message'] 
+                                ?? 'Form submission is now closed.';
+
+            $start_ts = $start_time ? strtotime(str_replace('T', ' ', $start_time)) : 0;
+            $end_ts   = $end_time   ? strtotime(str_replace('T', ' ', $end_time))   : 0;
+            if ($start_ts && $current_ts < $start_ts) {
+				return '<div class="mf-form-scheduling-message mf-form-waiting">'.esc_html($waiting_message).'</div>';
+            }elseif ($end_ts && $current_ts > $end_ts) {
+				return '<div class="mf-form-scheduling-message mf-form-expired">'.esc_html($expired_message).'</div>';
+            }
+        }		
 		ob_start();
 		?>
 
@@ -653,5 +702,546 @@ class Util{
 	public static function banner_consent(){
 		include_once "user-consent-banner/consent-check-view.php";
 	}
-	
+
+	/**
+	 * Check if any form is using a specific feature and save the usage data.
+	 * Once a user uses a feature, it will be tracked and remain free for them.
+	 * All feature usage data is stored in a single option table with key-value pairs.
+	 * 
+	 * @param string $setting_key The feature setting key to check
+	 * @return bool True if at least one form has the feature enabled or was previously used, false otherwise.
+	 */
+	public static function is_using_feature( $setting_key ){
+		// Get all feature usage data from single option
+		$feature_usage_data = get_option('metform_feature_usage', array());
+		
+		// Check if this feature was already used before
+		if (isset($feature_usage_data[$setting_key]) && 
+			isset($feature_usage_data[$setting_key]['used']) &&
+			($feature_usage_data[$setting_key]['used'] === '1' || $feature_usage_data[$setting_key]['used'] === 1)) {
+			return true;
+		}
+		
+		// Get all metform forms
+		$forms = get_posts([
+			'post_type' => 'metform-form',
+			'post_status' => 'publish',
+			'numberposts' => -1,
+			'fields' => 'ids' // Only get IDs for performance
+		]);
+
+		if (empty($forms)) {
+			return false;
+		}
+
+		// Check each form's settings for the feature
+		foreach ($forms as $form_id) {
+			$form_settings = get_post_meta($form_id, 'metform_form__form_setting', true);
+			
+			// Check if the feature is enabled (value should be '1' or 1)
+			if (isset($form_settings[$setting_key]) && 
+				($form_settings[$setting_key] === '1' || $form_settings[$setting_key] === 1)) {
+				
+				// Save to options table that this feature has been used with timestamp
+				$feature_usage_data[$setting_key] = array(
+					'used' => '1',
+					'last_used' => current_time('mysql'),
+					'timestamp' => time()
+				);
+				update_option('metform_feature_usage', $feature_usage_data);
+				
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Check if the current license tier is Free.
+	 * 
+	 * @return bool True if the current tier is Free, false otherwise.
+	 */
+	public static function is_free_tier() {
+		$package_info = get_option('__mf_package_info__', 'free');
+		return $package_info === 'free';
+	}
+
+	/**
+	 * Check if the current license tier is Starter.
+	 * 
+	 * @return bool True if the current tier is Starter, false otherwise.
+	 */
+	public static function is_starter(){
+		$package_info = get_option('__mf_package_info__');
+		return $package_info === 'starter';
+	}
+
+	/**
+	 * Check if the current license tier is Mid.
+	 * 
+	 * @return bool True if the current tier is Mid, false otherwise.
+	 */
+	public static function is_mid_tier() {
+		$package_info = get_option('__mf_package_info__');
+		return $package_info === 'mid';
+	}
+
+	/**
+	 * Check if the current license tier is Top.
+	 * 
+	 * @return bool True if the current tier is Top, false otherwise.
+	 */
+	public static function is_top_tier() {
+		$package_info = get_option('__mf_package_info__');
+		return $package_info === 'top';
+	}
+
+	public static function mf_pro_alert_notice( $params = array() ) {
+		?>
+		<div class="mf-pro-alert">
+			<div class="pro-content">
+				<h5 class="alert-heading"><?php echo isset( $params['heading'] ) && ! empty( $params['heading'] ) ? esc_html( $params['heading'] ) : 'You are currently using MetForm free version.'; ?></h5>
+				<p class="alert-description"><?php echo isset( $params['description'] ) && ! empty( $params['description'] ) ? esc_html( $params['description'] ) : 'Get full access to premium features by upgrading today.'; ?></p>
+			</div>
+			<div class="pro-btn">
+				<a href="https://wpmet.com/plugin/metform/pricing/" target="_blank"> <svg xmlns="http://www.w3.org/2000/svg" width="13" height="14" viewBox="0 0 13 14" fill="none">
+						<path d="M10.6 6.40002H2.2C1.53726 6.40002 1 6.93728 1 7.60002V11.8C1 12.4628 1.53726 13 2.2 13H10.6C11.2627 13 11.8 12.4628 11.8 11.8V7.60002C11.8 6.93728 11.2627 6.40002 10.6 6.40002Z" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+						<path d="M3.40039 6.4V4C3.40039 3.20435 3.71646 2.44129 4.27907 1.87868C4.84168 1.31607 5.60474 1 6.40039 1C7.19604 1 7.9591 1.31607 8.52171 1.87868C9.08432 2.44129 9.40039 3.20435 9.40039 4V6" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+					</svg> Upgrade </a>
+			</div>
+		</div>
+
+		<?php
+	}
+
+	/**
+	 * Check if a specific settings option is being used.
+	 * 
+	 * @param string $settings_key The settings key to check
+	 * @return bool True if the settings option is being used, false otherwise.
+	 */
+	public static function is_using_settings_option( $settings_key ) {
+		$settings = get_option( 'metform_option__settings', array() );
+		return isset( $settings[ $settings_key ] );
+	}
+
+	/**
+	 * Check if the user is an old pro user by checking usage of specific features.
+	 * 
+	 * @return bool True if the user is an old pro user, false otherwise.
+	 */
+	public static function is_used_any_feature(){
+
+		$using_from_modal = [
+			'require_login',
+			'capture_user_browser_data',
+			'limit_total_entries_status',
+			'count_views',
+			'mf_stop_vertical_scrolling',
+			'enable_user_notification',
+			'user_email_attach_submission_copy',
+			'mf_slack',
+			'mf_rest_api',
+			'mf_mail_aweber',
+			'mf_zapier',
+			'mf_paypal',
+			'mf_stripe',
+			'mf_zoho',
+			'quiz_summery',
+			'mf_redirect_params_status',
+			'email_verification_enable',
+			'mf_google_sheet',
+			'mf_mail_poet'
+		];
+
+		$using_from_settings = [
+			'mf_mailchimp_api_key',
+			'mf_ckit_api_key',
+			'mf_get_response_api_key',
+			'mf_active_campaign_api_key',
+			'mf_paypal_email',
+			'mf_stripe_live_publishiable_key',
+			'mf_stripe_test_secret_key',
+			'mf_zoho_data_center',
+			'mf_save_progress',
+			'mf_field_name_show',
+			'mf_enable_entry_file_delete',
+			'mf_google_map_api_key',
+			'met_form_aweber_mail_access_token_key',
+			'mf_google_sheet_client_id',
+			'mf_google_sheet_client_secret',
+			'mf_helpscout_app_id',
+			'mf_helpscout_app_secret'
+		];
+
+		foreach ( $using_from_modal as $setting_key ) {
+			if ( self::is_using_feature( $setting_key ) ) {
+				return true;
+			}
+		}
+
+		foreach ( $using_from_settings as $setting_key ) {
+			if ( self::is_using_settings_option( $setting_key ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Metform pro version since 3.9.5 we are tracking old pro users and new pro users for tier separation.
+	 * 
+	 * @return void/bool
+	 */
+	public static function is_old_pro_user(){
+
+		$payment_id = get_option('__mf_payment_id__', false);
+
+		if( $payment_id && $payment_id < 235393 ){
+			return true;
+		}
+
+		return false;
+	}
+
+	public static function country_list()
+    {
+        return [
+            'af' => 'Afghanistan',
+            'al' => 'Albania',
+            'dz' => 'Algeria',
+            'ad' => 'Andorra',
+            'ao' => 'Angola',
+            'ag' => 'Antigua and Barbuda',
+            'ar' => 'Argentina',
+            'am' => 'Armenia',
+            'aw' => 'Aruba',
+            'au' => 'Australia',
+            'at' => 'Austria',
+            'az' => 'Azerbaijan',
+            'bs' => 'Bahamas',
+            'bh' => 'Bahrain',
+            'bd' => 'Bangladesh',
+            'bb' => 'Barbados',
+            'by' => 'Belarus',
+            'be' => 'Belgium',
+            'bz' => 'Belize',
+            'bj' => 'Benin',
+            'bt' => 'Bhutan',
+            'bo' => 'Bolivia',
+            'ba' => 'Bosnia and Herzegovina',
+            'bw' => 'Botswana',
+            'br' => 'Brazil',
+            'io' => 'British Indian Ocean Territory',
+            'bn' => 'Brunei',
+            'bg' => 'Bulgaria',
+            'bf' => 'Burkina Faso',
+            'bi' => 'Burundi',
+            'kh' => 'Cambodia',
+            'cm' => 'Cameroon',
+            'ca' => 'Canada',
+            'cv' => 'Cape Verde',
+            'bq' => 'Caribbean Netherlands',
+            'cf' => 'Central African Republic',
+            'td' => 'Chad',
+            'cl' => 'Chile',
+            'cn' => 'China',
+            'co' => 'Colombia',
+            'km' => 'Comoros',
+            'cd' => 'Congo',
+            'cg' => 'Congo',
+            'cr' => 'Costa Rica',
+			'ci' => 'Côte d’Ivoire',
+            'hr' => 'Croatia',
+            'cu' => 'Cuba',
+            'cw' => 'Curaçao',
+            'cy' => 'Cyprus',
+            'cz' => 'Czech Republic',
+            'dk' => 'Denmark',
+            'dj' => 'Djibouti',
+            'dm' => 'Dominica',
+            'do' => 'Dominican Republic',
+            'ec' => 'Ecuador',
+            'eg' => 'Egypt',
+            'sv' => 'El Salvador',
+            'gq' => 'Equatorial Guinea',
+            'er' => 'Eritrea',
+            'ee' => 'Estonia',
+            'et' => 'Ethiopia',
+            'fj' => 'Fiji',
+            'fi' => 'Finland',
+            'fr' => 'France',
+            'gf' => 'French Guiana',
+            'pf' => 'French Polynesia',
+            'ga' => 'Gabon',
+            'gm' => 'Gambia',
+            'ge' => 'Georgia',
+            'de' => 'Germany',
+            'gh' => 'Ghana',
+            'gr' => 'Greece',
+            'gd' => 'Grenada',
+            'gp' => 'Guadeloupe',
+            'gu' => 'Guam',
+            'gt' => 'Guatemala',
+            'gn' => 'Guinea',
+            'gw' => 'Guinea-Bissau',
+            'gy' => 'Guyana',
+            'ht' => 'Haiti',
+            'hn' => 'Honduras',
+            'hk' => 'Hong Kong',
+            'hu' => 'Hungary',
+            'is' => 'Iceland',
+            'in' => 'India',
+            'id' => 'Indonesia',
+            'ir' => 'Iran',
+            'iq' => 'Iraq',
+            'ie' => 'Ireland',
+            'il' => 'Israel',
+            'it' => 'Italy',
+            'jm' => 'Jamaica',
+            'jp' => 'Japan',
+            'jo' => 'Jordan',
+            'kz' => 'Kazakhstan',
+            'ke' => 'Kenya',
+            'ki' => 'Kiribati',
+            'xk' => 'Kosovo',
+            'kw' => 'Kuwait',
+            'kg' => 'Kyrgyzstan',
+            'la' => 'Laos',
+            'lv' => 'Latvia',
+            'lb' => 'Lebanon',
+            'ls' => 'Lesotho',
+            'lr' => 'Liberia',
+            'ly' => 'Libya',
+            'li' => 'Liechtenstein',
+            'lt' => 'Lithuania',
+            'lu' => 'Luxembourg',
+            'mo' => 'Macau',
+            'mk' => 'Macedonia',
+            'mg' => 'Madagascar',
+            'mw' => 'Malawi',
+            'my' => 'Malaysia',
+            'mv' => 'Maldives',
+            'ml' => 'Mali',
+            'mt' => 'Malta',
+            'mh' => 'Marshall Islands',
+            'mq' => 'Martinique',
+            'mr' => 'Mauritania',
+            'mu' => 'Mauritius',
+            'mx' => 'Mexico',
+            'fm' => 'Micronesia',
+            'md' => 'Moldova',
+            'mc' => 'Monaco',
+            'mn' => 'Mongolia',
+            'me' => 'Montenegro',
+            'ma' => 'Morocco',
+            'mz' => 'Mozambique',
+            'mm' => 'Myanmar',
+            'na' => 'Namibia',
+            'nr' => 'Nauru',
+            'np' => 'Nepal',
+            'nl' => 'Netherlands',
+            'nc' => 'New Caledonia',
+            'nz' => 'New Zealand',
+            'ni' => 'Nicaragua',
+            'ne' => 'Niger',
+            'ng' => 'Nigeria',
+            'kp' => 'North Korea',
+            'no' => 'Norway',
+            'om' => 'Oman',
+            'pk' => 'Pakistan',
+            'pw' => 'Palau',
+            'ps' => 'Palestine',
+            'pa' => 'Panama',
+            'pg' => 'Papua New Guinea',
+            'py' => 'Paraguay',
+            'pe' => 'Peru',
+            'ph' => 'Philippines',
+            'pl' => 'Poland',
+            'pt' => 'Portugal',
+            'pr' => 'Puerto Rico',
+            'qa' => 'Qatar',
+            're' => 'Réunion',
+            'ro' => 'Romania',
+            'ru' => 'Russia',
+            'rw' => 'Rwanda',
+            'kn' => 'Saint Kitts and Nevis',
+            'lc' => 'Saint Lucia',
+            'vc' => 'Saint Vincent and the Grenadines',
+            'ws' => 'Samoa',
+            'sm' => 'San Marino',
+            'st' => 'São Tomé and Príncipe',
+            'sa' => 'Saudi Arabia',
+            'sn' => 'Senegal',
+            'rs' => 'Serbia',
+            'sc' => 'Seychelles',
+            'sl' => 'Sierra Leone',
+            'sg' => 'Singapore',
+            'sk' => 'Slovakia',
+            'si' => 'Slovenia',
+            'sb' => 'Solomon Islands',
+            'so' => 'Somalia',
+            'za' => 'South Africa',
+            'kr' => 'South Korea',
+            'ss' => 'South Sudan',
+            'es' => 'Spain',
+            'lk' => 'Sri Lanka',
+            'sd' => 'Sudan',
+            'sr' => 'Suriname',
+            'sz' => 'Swaziland',
+            'se' => 'Sweden',
+            'ch' => 'Switzerland',
+            'sy' => 'Syria',
+            'tw' => 'Taiwan',
+            'tj' => 'Tajikistan',
+            'tz' => 'Tanzania',
+            'th' => 'Thailand',
+            'tl' => 'Timor-Leste',
+            'tg' => 'Togo',
+            'to' => 'Tonga',
+            'tt' => 'Trinidad and Tobago',
+            'tn' => 'Tunisia',
+            'tr' => 'Turkey',
+            'tm' => 'Turkmenistan',
+            'tv' => 'Tuvalu',
+            'ug' => 'Uganda',
+            'ua' => 'Ukraine',
+            'ae' => 'United Arab Emirates',
+            'gb' => 'United Kingdom',
+            'us' => 'United States',
+            'uy' => 'Uruguay',
+            'uz' => 'Uzbekistan',
+            'vu' => 'Vanuatu',
+            'va' => 'Vatican City',
+            've' => 'Venezuela',
+            'vn' => 'Vietnam',
+            'ye' => 'Yemen',
+            'zm' => 'Zambia',
+            'zw' => 'Zimbabwe',
+        ];
+    }
+
+	/**
+	 * Integration settings keys for checking if an integration is already in use.
+	 * Used for grandfathering existing pro users who already use specific integrations.
+	 */
+	private static $integration_settings_keys = array(
+		'mailchimp' => 'mf_mailchimp_api_key',
+		'aweber' => 'met_form_aweber_mail_access_token_key',
+		'activecampaign' => 'mf_active_campaign_api_key',
+		'getresponse' => 'mf_get_response_api_key',
+		'convertkit' => 'mf_ckit_api_key',
+	);
+
+	/**
+	 * Check if a specific integration is already in use (for existing pro user access).
+	 * 
+	 * @param string $integration_key The integration key to check
+	 * @return bool True if the integration is in use, false otherwise.
+	 */
+	public static function is_integration_in_use($integration_key) {
+		if (isset(self::$integration_settings_keys[$integration_key])) {
+			return self::is_using_settings_option(self::$integration_settings_keys[$integration_key]);
+		}
+		return false;
+	}
+
+	/**
+	 * Check if user has access to a specific tier.
+	 * 
+	 * @param string $required_tier - 'free', 'pro', 'mid', 'top'
+	 * @return bool True if user has access to the tier, false otherwise.
+	 */
+	public static function has_tier_access($required_tier) {
+		switch ($required_tier) {
+			case 'free':
+				return true;
+			case 'pro':
+				return class_exists('\MetForm_Pro\Base\Package');
+			case 'mid':
+				return self::is_mid_tier() || self::is_top_tier();
+			case 'top':
+				return self::is_top_tier();
+			default:
+				return false;
+		}
+	}
+
+	/**
+	 * Check if user should have restricted access to an integration.
+	 * 
+	 * Logic:
+	 * 1. Free tier - always accessible
+	 * 2. Has required tier access - accessible
+	 * 3. For EXISTING features (existing_pro_user_access = true):
+	 *    - Old pro users (before tier system) get access
+	 *    - Pro users already using this integration keep access
+	 * 4. For NEW features (existing_pro_user_access = false):
+	 *    - Only tier check applies
+	 *    - Old pro users and existing users do NOT get automatic access
+	 * 
+	 * @param array $integration - Integration config with 'required_tier' and 'existing_pro_user_access'
+	 * @param string $integration_key - Integration key
+	 * @return bool - true if access should be restricted, false if accessible
+	 */
+	public static function should_restrict_integration_access($integration, $integration_key) {
+		$required_tier = $integration['required_tier'] ?? 'free';
+		$existing_pro_user_access = $integration['existing_pro_user_access'] ?? false;
+		$pro_exists = class_exists('\MetForm_Pro\Base\Package');
+		
+		// Free tier - always accessible
+		if ($required_tier === 'free') {
+			return false;
+		}
+		
+		// Check if user has the required tier access
+		if (self::has_tier_access($required_tier)) {
+			return false;
+		}
+		
+		// For existing features (existing_pro_user_access = true):
+		// - Old pro users get access to all existing pro features
+		// - Existing pro users who were already using this integration keep access
+		// For new features (existing_pro_user_access = false):
+		// - Only tier check applies, no legacy support
+		if ($existing_pro_user_access) {
+			// Old pro users get access to all existing pro features (before tier system was introduced)
+			if ($pro_exists && self::is_old_pro_user()) {
+				return false;
+			}
+			
+			// Allow existing pro users who were already using this integration before tier changes
+			if ($pro_exists && self::is_integration_in_use($integration_key)) {
+				return false;
+			}
+		}
+		
+		// User doesn't have access
+		return true;
+	}
+
+	/**
+	 * Get upgrade tooltip text based on required tier.
+	 * 
+	 * @param string $required_tier - 'pro', 'mid', 'top'
+	 * @return string The tooltip text
+	 */
+	public static function get_upgrade_tooltip($required_tier) {
+		$pro_exists = class_exists('\MetForm_Pro\Base\Package');
+		
+		if (!$pro_exists) {
+			return 'Upgrade for premium access.';
+		}
+		
+		switch ($required_tier) {
+			case 'top':
+				return 'Get access by upgrading to MetForm Agency plan.';
+			case 'mid':
+				return 'Get access by upgrading to MetForm Professional plan.';
+			default:
+				return 'Upgrade for premium access.';
+		}
+	}
 }

@@ -59,6 +59,9 @@ class Form_Data
                             continue;
                         }
 
+                        // Check if field has submitted data - if yes, show it regardless of conditional logic
+                        $has_submitted_data = isset($form_data[$key]) && $form_data[$key] !== '';
+
                         $conditions = isset($map_data[$key]["mf_conditional_logic_form_list"]) ? $map_data[$key]["mf_conditional_logic_form_list"] : [];
                         $no_of_condition = count($conditions);
                         $checking_result = array();
@@ -66,13 +69,16 @@ class Form_Data
 
                         list($map_data, $form_data, $checking_result) = self::condition_criteria_match($map_data, $key, $conditions, $form_data, $checking_result);
 
-                        if ($no_of_condition > 1 && $condition_match_criteria == "or") {
-                            if (!in_array(true, $checking_result)) {
-                                continue;
-                            }
-                        } else {
-                            if (in_array(false, $checking_result)) {
-                                continue;
+                        // If field has submitted data, show it; otherwise check conditional logic
+                        if (!$has_submitted_data) {
+                            if ($no_of_condition > 1 && $condition_match_criteria == "or") {
+                                if (!in_array(true, $checking_result)) {
+                                    continue;
+                                }
+                            } else {
+                                if (in_array(false, $checking_result)) {
+                                    continue;
+                                }
                             }
                         }
 
@@ -85,8 +91,8 @@ class Form_Data
                         
                         if(isset($form_settings['form_type']) && $form_settings['form_type'] === 'quiz-form' && isset($form_data['wrong-answer']) && isset($form_data['right-answer'])){
                             
-                            $wrong_answers = explode(",", $form_data['wrong-answer']);
-                            $right_answers = explode(",", $form_data['right-answer']);
+                            $wrong_answers = array_map('sanitize_text_field', explode(",", $form_data['wrong-answer']));
+                            $right_answers = array_map('sanitize_text_field', explode(",", $form_data['right-answer']));
 
                             // Find thefield if it exists in the right answers array
                             if(in_array($map_data[$key]['mf_input_name'], $right_answers)){
@@ -314,6 +320,11 @@ class Form_Data
                             continue;
                         }
 
+                        // Check if field has submitted data - if yes, show it regardless of conditional logic
+                        $has_submitted_data = isset($form_data[$key]) && $form_data[$key] !== '';
+
+                        
+
                         $conditions = isset($map_data[$key]["mf_conditional_logic_form_list"]) ? $map_data[$key]["mf_conditional_logic_form_list"] : [];
                         $no_of_condition = count($conditions);
                         $checking_result = array();
@@ -321,13 +332,16 @@ class Form_Data
 
                         list($map_data, $form_data, $checking_result) = self::condition_criteria_match($map_data, $key, $conditions, $form_data, $checking_result);
 
-                         if ($no_of_condition > 1 && $condition_match_criteria == "or") {
-                            if (!in_array(true, $checking_result)) {
-                                continue;
-                            }
-                        } else {
-                            if (in_array(false, $checking_result)) {
-                                continue;
+                        // If field has submitted data, show it; otherwise check conditional logic
+                        if (!$has_submitted_data) {
+                            if ($no_of_condition > 1 && $condition_match_criteria == "or") {
+                                if (!in_array(true, $checking_result)) {
+                                    continue;
+                                }
+                            } else {
+                                if (in_array(false, $checking_result)) {
+                                    continue;
+                                }
                             }
                         }
 

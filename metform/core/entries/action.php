@@ -114,6 +114,28 @@ class Action
 
         $this->response->data['form_data'] = $form_data;
 
+        // Form scheduling: prevent submission after end time
+        if (
+            isset($this->form_settings['form_scheduling_status'])
+            && $this->form_settings['form_scheduling_status'] == '1'
+        ) {
+            $current_ts = current_time('timestamp');
+            $end_time   = $this->form_settings['mf_scheduling_submission_ends'];
+            $end_ts     = $end_time ? strtotime(str_replace('T', ' ', $end_time)) : 0;
+
+            if ($end_ts && $current_ts > $end_ts) {
+                $expired_message = !empty($this->form_settings['mf_scheduling_form_expired_message'])
+                    ? $this->form_settings['mf_scheduling_form_expired_message']
+                    : esc_html__('Form submission is now closed.', 'metform');
+
+                $this->response->status = 0;
+                $this->response->error  = [ $expired_message ];
+                $this->response->data['message'] = $expired_message;
+
+                return $this->response;
+            }
+        }
+
         $email_name = $this->get_input_name_by_widget_type('mf-email')?? [];
 
       
@@ -430,6 +452,36 @@ class Action
             }
         }
 
+        /**
+         * MailerLite subscriber integration
+         */
+        if (class_exists('\MetForm_Pro\Core\Integrations\Mailerlite')) {
+            if (
+                isset($this->form_settings['mf_mailerlite']) && $this->form_settings['mf_mailerlite'] == '1'
+                && $this->email_name != null
+                && !empty($form_data[$this->email_name])
+            ) {
+                $ml_api_key = isset($this->form_settings['mf_mailerlite_api_key']) ? $this->form_settings['mf_mailerlite_api_key'] : '';
+
+                if (!empty($ml_api_key)) {
+                    $mailerlite = new \MetForm_Pro\Core\Integrations\Mailerlite($ml_api_key);
+                    $ml_response = $mailerlite->process_form_submission(
+                        $form_id,
+                        $form_data,
+                        $form_data[$this->email_name]
+                    );
+
+                    $this->response->status = isset($ml_response['status']) ? $ml_response['status'] : 0;
+                    if ($this->response->status == 0) {
+                        $this->response->error = [
+                            esc_html__('Problem with your MailerLite integration.', 'metform')
+                            . (!empty($ml_response['message']) ? ' ' . $ml_response['message'] : '')
+                        ];
+                    }
+                }
+            }
+        }
+
         if (class_exists('Metform_Pro\Core\Integrations\Fluent_Crm')) {
             if (isset($this->form_settings['mf_fluent']) && $this->form_settings['mf_fluent'] == '1' && $this->email_name != null && !empty($form_data[$this->email_name])) {
 
@@ -455,7 +507,7 @@ class Action
             $this->entry_id = wp_insert_post($defaults);
 
             update_post_meta($this->entry_id, 'mf_page_id', $page_id);
-            $entry_serial_no = get_option('metform_last_entry_serial_no');
+            $entry_serial_no = (int) get_option('metform_last_entry_serial_no', 0);
             $all_data = array_merge($all_data, ['mf_id' => ++$entry_serial_no, 'mf_form_name' => $this->title]);
             update_option('metform_last_entry_serial_no', $entry_serial_no);
             update_post_meta($this->entry_id, 'metform_entries_serial_no', $entry_serial_no);
@@ -740,7 +792,70 @@ class Action
 
             }
         }
+        
+        // google drive
+        if(class_exists('\MetForm_Pro\Core\Integrations\Google_Drive\MF_Google_Drive')) {            
+            if(isset($this->form_settings['mf_google_drive']) && $this->form_settings['mf_google_drive'] == 1) {
+                $google_drive_folder_list_id = isset($this->form_settings['mf_google_drive_folder_list_id']) ? 
+                    ["folder_id" => $this->form_settings['mf_google_drive_folder_list_id']] : null;
+                
+                // Filter file_upload_info to only include mf-file-upload widget data
+                $filtered_file_upload_info = isset($this->file_upload_info['mf-file-upload']) ? 
+                    ['mf-file-upload' => $this->file_upload_info['mf-file-upload']] : [];
+                
+                    // Proceed only if there are files from mf-file-upload widget
+                    if (!empty($filtered_file_upload_info) && !empty($google_drive_folder_list_id)) {
+                    $drive = \MetForm_Pro\Core\Integrations\Google_Drive\MF_Google_Drive::instance()->insert_file(
+                        $this->form_id, 
+                        $this->title, 
+                        $this->form_data, 
+                        $filtered_file_upload_info, 
+                        $this->get_fields($this->form_id), 
+                        $google_drive_folder_list_id
+                    );
+                    
+                    if ($drive === false) {
+                        $this->response->error[] = esc_html__('Google Drive upload failed: SSL certificate or OAuth credentials problem', 'metform');
+                        $this->response->status = 0;
+                        return $this->response;
+                    }
+                }
+            }
+        }
 
+        // dropbox file upload
+        if (class_exists('\MetForm_Pro\Core\Integrations\Dropbox\MF_Dropbox')) {
+            if (isset($this->form_settings['mf_dropbox']) && $this->form_settings['mf_dropbox'] == '1') {
+                
+                $dropbox_folder_path = isset($this->form_settings['mf_dropbox_list_id']) ? $this->form_settings['mf_dropbox_list_id'] : '';
+                
+                // Only process files from mf-file-upload widget
+                if (!empty($dropbox_folder_path) && isset($this->file_upload_info['mf-file-upload']) && is_array($this->file_upload_info['mf-file-upload'])) {
+                    $dropbox = \MetForm_Pro\Core\Integrations\Dropbox\MF_Dropbox::instance();
+                    
+                    // Process each uploaded file from mf-file-upload widget
+                    foreach ($this->file_upload_info['mf-file-upload'] as $file) {
+                        if (!is_array($file)) {
+                            continue;
+                        }
+                        
+                        // Check for 'file' key (actual structure) or 'file_path' key (legacy)
+                        $file_path = isset($file['file']) ? $file['file'] : (isset($file['file_path']) ? $file['file_path'] : '');
+                        
+                        if (!empty($file_path) && file_exists($file_path)) {
+                            // Use 'name' key from file array, fallback to basename
+                            $file_name = isset($file['name']) ? $file['name'] : basename($file_path);
+                            $upload_result = $dropbox->upload_file(
+                                $file_path,
+                                $dropbox_folder_path,
+                                $file_name
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        
         $form_settings = $this->form_settings;
         $form_id = $this->form_id;
 
@@ -803,10 +918,22 @@ class Action
         //## set stransient token for data access checking 
         set_transient('transient_mf_form_data_entry_id_'.$this->entry_id, $this->entry_id, 15*60);
         
-        $mf_make_str_for_hashing = $this->entry_id.get_current_user_id();
-        $mf_hashed_str_for_access_check = password_hash($mf_make_str_for_hashing,PASSWORD_DEFAULT);
-        // setup cookie for current submission.
-        setcookie(base64_encode('mf-cookie'), $mf_hashed_str_for_access_check, time()+(60*15),'/');
+       // Generate a cryptographically secure random token
+        $mf_secure_token = wp_generate_password(32, false);
+        // Store the hashed token in a transient keyed by entry ID
+        $mf_token_hash = hash('sha256', $mf_secure_token);
+        set_transient('transient_mf_token_hash_'.$this->entry_id, $mf_token_hash, 15*60);
+        
+        // Set the raw token as an HttpOnly, Secure, SameSite cookie
+        $cookie_options = array(
+            'expires' => time() + (60 * 15),
+            'path' => '/',
+            'domain' => '',
+            'secure' => is_ssl(),
+            'httponly' => true,
+            'samesite' => 'Strict'
+        );
+        setcookie(base64_encode('mf-cookie'), $mf_secure_token, $cookie_options);
     }
 
     private function update()
@@ -980,7 +1107,16 @@ class Action
                 ];
 
                 if(in_array($key, $quiz_data_keys)){
-                    $this->form_data[$key] = $value;
+                    // Sanitize quiz data based on the field type
+                    if($key === 'quiz-marks' || $key === 'total-question'){
+                        // These should be numeric values
+                        $this->form_data[$key] = floatval($value);
+                    } else {
+                        // 'wrong-answer' and 'right-answer' are comma-separated field names
+                        // Sanitize each field name in the list
+                        $sanitized_values = array_map('sanitize_text_field', explode(',', $value));
+                        $this->form_data[$key] = implode(',', array_filter($sanitized_values));
+                    }
                 }
             }
         }
@@ -1009,6 +1145,23 @@ class Action
 
 
     
+    /**
+     * Allow additional MIME types for wp_handle_upload().
+     * WordPress does not include .iges / .igs in its default list,
+     * so without this filter those files are rejected at the wp layer.
+     */
+    public function allow_extra_upload_mimes($mimes)
+    {
+        // finfo detects .iges/.igs, .stp/.step files as 'text/plain' (plain-text ISO formats).
+        // The registered MIME must match the finfo result so wp_check_filetype_and_ext()
+        // and wp_handle_upload() accept the file.
+        $mimes['iges'] = 'text/plain';
+        $mimes['igs']  = 'text/plain';
+        $mimes['stp']  = 'text/plain';
+        $mimes['step'] = 'text/plain';
+        return $mimes;
+    }
+
     private function handle_file($file_data, $input_name)
     { 
          
@@ -1020,6 +1173,8 @@ class Action
             require_once ABSPATH . 'wp-admin/includes/file.php';
         }
 
+        // Allow extra MIME types (e.g. .iges, .igs, .stp, .step) that WordPress does not permit by default. 
+        add_filter('upload_mimes', [$this, 'allow_extra_upload_mimes']);
 
          
          // Filter to modify upload directory

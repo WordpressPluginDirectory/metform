@@ -2,6 +2,8 @@
 namespace MetForm\Core\Admin;
 
 use MetForm\Core\Integrations\Onboard\Onboard;
+use MetForm_Pro\Base\Package;
+use MetForm\Utils\Util;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -52,7 +54,7 @@ class Base {
         //get existing settings
         $settings = get_option($this->key_settings_option, []);
 
-        $checkboxes = array('mf_save_progress', 'mf_field_name_show', 'mf_paypal_sandbox', 'mf_stripe_sandbox');
+        $checkboxes = array('mf_save_progress', 'mf_field_name_show', 'mf_enable_entry_file_delete', 'mf_paypal_sandbox', 'mf_stripe_sandbox');
 
         //if checkbox is not set, unset it from settings that was set previously.
         foreach ($checkboxes as $key) {
@@ -126,7 +128,62 @@ class Base {
 
                     $disabledAttr = empty($code)? '': 'disabled';
                 }
+                if (class_exists(Package::class) && class_exists('\MetForm_Pro\Core\Integrations\Dropbox\Dropbox_Access_Token')  && (Util::is_mid_tier() || Util::is_top_tier())) {
+                    /**
+                     * Handle Dropbox disconnect request
+                     */
+                    if(!empty($_REQUEST['mf_dropbox_disconnect'])) {
+                        delete_option('mf_dropbox_access_token');
+                        delete_transient('mf_dropbox_token');
+                        
+                        ?>
+                        <script type="text/javascript">
+                            // redirect to general settings section
+                            location.href = '<?php echo esc_url(admin_url('admin.php?page=metform-menu-settings#mf-general_options')); ?>';
+                        </script>
+                        <?php
+                    }
 
+                    /**
+                     * Checks if the current request is from Dropbox OAuth callback
+                     * 
+                     * Validates that the request contains a 'code' parameter (Dropbox authorization code),
+                     * does not have a 'state' parameter, does not have a 'scope' parameter set,
+                     * and the scope does not contain 'googleapis' (to distinguish from Google OAuth)
+                     * 
+                     * @var bool $is_dropbox True if request appears to be from Dropbox OAuth flow, false otherwise
+                     */
+                    $is_dropbox = !empty($_REQUEST['code']) && empty($_REQUEST['state']) && (!isset($_REQUEST['scope']) || strpos($_REQUEST['scope'], 'googleapis') === false);  
+                    if($is_dropbox ){
+                        $dropbox = new \MetForm_Pro\Core\Integrations\Dropbox\Dropbox_Access_Token;
+                        $access_code = $dropbox->get_access_token();
+                        
+                        if(isset($access_code['body'])){
+                            // Save access token and set transient
+                            $expire_time = isset(json_decode($access_code['body'], true)['expires_in'] ) ? json_decode($access_code['body'], true)['expires_in'] : '';
+                            update_option( 'mf_dropbox_access_token', $access_code['body'] );
+                            set_transient( 'mf_dropbox_token', $access_code['body'] , $expire_time - 20 );
+                            
+                            ?>
+                            <script type="text/javascript">
+                                // redirect to general settings section
+                                location.href = '<?php echo esc_url(admin_url('admin.php?page=metform-menu-settings#mf-general_options')); ?>';
+                            </script>
+                            <?php
+                        }
+                    }
+                }
+                if(!empty($_REQUEST['mf_google_disconnect'])) {
+                    delete_option('wf_google_access_token');
+                    delete_transient('mf_google_sheet_token');
+                    
+                    ?>
+                    <script type="text/javascript">
+                        // redirect to google sheet integration section
+                        location.href = '<?php echo esc_url(admin_url('admin.php?page=metform-menu-settings#mf-google_sheet_integration')); ?>';
+                    </script>
+                    <?php
+                }
                 if( !empty($_REQUEST['code']) && empty($_REQUEST['state']) ) {
                     $google = new \MetForm_Pro\Core\Integrations\Google_Sheet\Google_Access_Token;
                     $access_code = $google->get_access_token();
