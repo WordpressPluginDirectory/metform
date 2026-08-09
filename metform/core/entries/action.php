@@ -70,6 +70,7 @@ class Action
         $current_status = get_post_status ( $form_id );
 
         if( 'trash' == $current_status || ( !current_user_can( 'edit_posts') && 'draft' == $current_status)  ){
+            $this->response->failure_type = 'form_access';
             $this->response->error[0] = esc_html__('You are not permitted to access this form', 'metform');
             return $this->response;
         }
@@ -77,11 +78,13 @@ class Action
         $this->fields = $this->get_fields($form_id);
         if(isset($this->fields['mf-recaptcha']) && !isset($form_data['g-recaptcha-response']) && !isset($form_data['g-recaptcha-response-v3']))  {
             $this->response->status = 0;
+            $this->response->failure_type = 'security';
             $this->response->error[] = esc_html__('Unauthorized submission.', 'metform');
             return $this->response;
         }
         if(isset($this->fields['mf-simple-captcha']) && !isset($form_data['mf-captcha-challenge'])){
             $this->response->status = 0;
+            $this->response->failure_type = 'security';
             $this->response->error[] = esc_html__('Unauthorized submission.', 'metform');
             return $this->response;
         }
@@ -93,13 +96,15 @@ class Action
 
             if(isset($response['status']) && $response['status'] == 0){
                 $this->response->status = 0;
+                $this->response->failure_type = 'file_upload';
                 $this->response->error[0] = $response['error'] ?? esc_html__('File size exceeded.', 'metform');
                 return $this->response;
             }
-        
+
             // validate files
             if (count(File_Data_Validation::validate($this->fields, $file_data)) > 0) {
                 $this->response->status = 0;
+                $this->response->failure_type = 'file_upload';
                 $this->response->error[] = esc_html__('You are trying to upload wrong file!', 'metform');
                 return $this->response;
             }
@@ -129,6 +134,7 @@ class Action
                     : esc_html__('Form submission is now closed.', 'metform');
 
                 $this->response->status = 0;
+                $this->response->failure_type = 'scheduling';
                 $this->response->error  = [ $expired_message ];
                 $this->response->data['message'] = $expired_message;
 
@@ -145,6 +151,7 @@ class Action
            
             if($validated_data['status'] === 1){
                 $this->response->status = 0;
+                $this->response->failure_type = 'duplicate';
                 $this->response->error = [];
                 $this->response->error[0] = sprintf(esc_html__('%1$s %2$s already exist.', 'metform'), $validated_data['input_label'], $validated_data['duplicate_field']);
                 return $this->response;
@@ -160,6 +167,7 @@ class Action
         if (!$this->mf_is_woo_exists()) {
             if (!isset($form_data['form_nonce']) || !wp_verify_nonce($form_data['form_nonce'], 'form_nonce')) {
                 $this->response->status = 0;
+                $this->response->failure_type = 'security';
                 $this->response->error[] = esc_html__('Unauthorized submission.', 'metform');
                 return $this->response;
             }
@@ -170,6 +178,7 @@ class Action
         $validate = $this->validate_form_data($form_data);
         if ($validate == false) {
             $this->response->status = 0;
+            $this->response->failure_type = 'validation';
             $this->response->error =  [ esc_html__('Form validation failed', 'metform') ];
             return $this->response;
         }
@@ -178,6 +187,7 @@ class Action
         
         if (isset($filter_validate['is_valid']) && $filter_validate['is_valid'] == false) {
             $this->response->status = 0;
+            $this->response->failure_type = 'validation';
             $this->response->error =  [ $filter_validate['message'] ?? esc_html__('Form validation failed', 'metform') ];
             return $this->response;
         }
@@ -186,12 +196,14 @@ class Action
         if ((isset($form_data['g-recaptcha-response']) || isset($form_data['g-recaptcha-response-v3'])) && (isset($this->fields['mf-recaptcha'])) && (isset($this->form_settings['mf_recaptcha_site_key'])) && $this->form_settings['mf_recaptcha_site_key'] != '') {
             if (isset($form_data['g-recaptcha-response']) && ($form_data['g-recaptcha-response'] == "")) {
                 $this->response->status = 0;
+                $this->response->failure_type = 'captcha';
                 $this->response->error[] = esc_html__('Please solve the recaptcha.', 'metform');
                 return $this->response;
             }
 
             if ((isset($this->form_settings['mf_recaptcha_version']) && ($this->form_settings['mf_recaptcha_version'] == 'recaptcha-v3')) && (!isset($form_data['g-recaptcha-response-v3']) || ($form_data['g-recaptcha-response-v3'] == ""))) {
                 $this->response->status = 0;
+                $this->response->failure_type = 'captcha';
                 $this->response->error[] = esc_html__('Google captcha token not found.', 'metform');
                 return $this->response;
             }
@@ -207,6 +219,7 @@ class Action
             //$this->response->data['responseKeys'] = $response['responseKeys'];
             $this->response->status = $response['status'];
             if ($response['status'] == 0) {
+                $this->response->failure_type = 'captcha';
                 $this->response->error[] = (isset($response['error']) ? $response['error'] : '');
                 return $this->response;
             }
@@ -216,6 +229,7 @@ class Action
         if (isset($form_data['mf-captcha-challenge'])) {
             if (($form_data['mf-captcha-challenge']) == "") {
                 $this->response->status = 0;
+                $this->response->failure_type = 'captcha';
                 $this->response->error = [ esc_html__('Please solve the recaptcha.', 'metform') ];
                 return $this->response;
             }
@@ -240,6 +254,7 @@ class Action
 
             if (!isset($_SESSION['mf_captcha_text'])) {
                 $this->response->status = 0;
+                $this->response->failure_type = 'captcha';
                 $this->response->error = [ esc_html__('Time out of this captcha. Please reload or choose another one.', 'metform') ];
                 return $this->response;
             }
@@ -249,6 +264,7 @@ class Action
                 //$this->response->data['captcha'] = esc_html__('Captcha is verified.', 'metform');
             } else {
                 $this->response->status = 0;
+                $this->response->failure_type = 'captcha';
                 $this->response->error = [ esc_html__('Enter correct captcha.', 'metform') ];
                 return $this->response;
             }
@@ -259,6 +275,7 @@ class Action
 
         if (($required_loggin == 1) && (!is_user_logged_in())) {
             $this->response->status = 0;
+            $this->response->failure_type = 'login_required';
             $this->response->error = [ esc_html__('You must be logged in to submit form.', 'metform') ];
             return $this->response;
         }
@@ -269,6 +286,7 @@ class Action
 
             if (($entry_limit == 1) && ($this->get_entry_count() >= $this->form_settings['limit_total_entries'])) {
                 $this->response->status = 0;
+                $this->response->failure_type = 'entry_limit';
                 $this->response->error = [ esc_html__('Form submission limit exceeded.', 'metform') ];
 
                 return $this->response;
@@ -327,7 +345,7 @@ class Action
                 }
 
                 $this->response->status = isset($response['status']) ? $response['status'] : 0;
-	            if($this->response->status == 0) $this->response->error = [ esc_html__('Problem with your mailchimp integration.', 'metform') ];
+	            if($this->response->status == 0) { $this->response->failure_type = 'integration'; $this->response->error = [ esc_html__('Problem with your mailchimp integration.', 'metform') ]; }
 
             }
         }
@@ -343,7 +361,7 @@ class Action
 
                 $this->response->status = isset($response['status']) ? $response['status'] : 0;
                 $this->response->active_campaign = isset($response['msgs']) ? $response['msgs'] : [];
-	            if($this->response->status == 0) $this->response->error = [ esc_html__('Problem with your activeCampaign integration.', 'metform') ];
+	            if($this->response->status == 0) { $this->response->failure_type = 'integration'; $this->response->error = [ esc_html__('Problem with your activeCampaign integration.', 'metform') ]; }
             }
         }
 
@@ -358,7 +376,7 @@ class Action
                 $response = $get_response->call_api($form_data, ['auth' => $this->form_settings, 'email_name' => $this->email_name]);
 
                 $this->response->status = isset($response['status']) ? $response['status'] : 0;
-	            if($this->response->status == 0) $this->response->error = [ esc_html__('Problem with your GetResponse integration.', 'metform') ];
+	            if($this->response->status == 0) { $this->response->failure_type = 'integration'; $this->response->error = [ esc_html__('Problem with your GetResponse integration.', 'metform') ]; }
             }
         }
 
@@ -379,7 +397,7 @@ class Action
                 }
 
                 $this->response->status = isset($response['status']) ? $response['status'] : 0;
-	            if($this->response->status == 0) $this->response->error = [ esc_html__('Problem with your zapier integration.', 'metform') ];
+	            if($this->response->status == 0) { $this->response->failure_type = 'integration'; $this->response->error = [ esc_html__('Problem with your zapier integration.', 'metform') ]; }
             }
         }
 
@@ -402,7 +420,7 @@ class Action
                 }
 
                 $this->response->status = isset($response['status']) ? $response['status'] : 0;
-	            if($this->response->status == 0) $this->response->error = [ esc_html__('Problem with your slack integration.', 'metform') ];
+	            if($this->response->status == 0) { $this->response->failure_type = 'integration'; $this->response->error = [ esc_html__('Problem with your slack integration.', 'metform') ]; }
             }
         }
 
@@ -418,7 +436,7 @@ class Action
                 $response = $cKit->call_api($form_data, ['mail_settings' => $this->form_settings, 'email_name' => $this->email_name]);
 
                 $this->response->status = isset($response['status']) ? $response['status'] : 0;
-	            if($this->response->status == 0) $this->response->error = [ esc_html__('Problem with convertKit.', 'metform') ];
+	            if($this->response->status == 0) { $this->response->failure_type = 'integration'; $this->response->error = [ esc_html__('Problem with convertKit.', 'metform') ]; }
             }
         }
 
@@ -434,7 +452,7 @@ class Action
                 $response = $aweber->call_api($form_data, ['mail_settings' => $this->form_settings, 'email_name' => $this->email_name]);
 
                 $this->response->status = isset($response['status']) ? $response['status'] : 0;
-	            if($this->response->status == 0) $this->response->error = [ esc_html__('Problem with your Aweber integration.', 'metform') ];
+	            if($this->response->status == 0) { $this->response->failure_type = 'integration'; $this->response->error = [ esc_html__('Problem with your Aweber integration.', 'metform') ]; }
             }
         }
 
@@ -448,7 +466,7 @@ class Action
                 $response = $mPoet->call_api($form_data, ['mail_settings' => $this->form_settings, 'email_name' => $this->email_name]);
 
                 $this->response->status = isset($response['status']) ? $response['status'] : 0;
-	            if($this->response->status == 0) $this->response->error = [ esc_html__('Problem with your Mail Poet integration.', 'metform') ];
+	            if($this->response->status == 0) { $this->response->failure_type = 'integration'; $this->response->error = [ esc_html__('Problem with your Mail Poet integration.', 'metform') ]; }
             }
         }
 
@@ -473,6 +491,7 @@ class Action
 
                     $this->response->status = isset($ml_response['status']) ? $ml_response['status'] : 0;
                     if ($this->response->status == 0) {
+                        $this->response->failure_type = 'integration';
                         $this->response->error = [
                             esc_html__('Problem with your MailerLite integration.', 'metform')
                             . (!empty($ml_response['message']) ? ' ' . $ml_response['message'] : '')
@@ -495,6 +514,104 @@ class Action
         //set submitted data array and key to a class
         $all_data = !empty($this->form_data) && is_array($this->form_data) ? $this->form_data : [];
 
+        // Get payment method to determine if we need payment-first flow
+        $payment_method_check = $this->get_input_name_by_widget_type('mf-payment-method');
+        $selected_payment_method = null;
+        
+        // Only process payment logic if payment method widget exists
+        if (!empty($payment_method_check)) {
+            // Check if this is a payment-first request (get payment config without storing entries)
+            $is_payment_first = isset($form_data['mf_payment_first']) && $form_data['mf_payment_first'] == '1';
+            $is_payment_completed = isset($form_data['mf_payment_completed']) && $form_data['mf_payment_completed'] == '1';
+            
+            if (isset($payment_method_check[0]) && isset($this->form_data[$payment_method_check[0]])) {
+                $selected_payment_method = $this->form_data[$payment_method_check[0]];
+            }
+        }
+        
+        $is_payment_first = isset($form_data['mf_payment_first']) && $form_data['mf_payment_first'] == '1';
+        $is_payment_completed = isset($form_data['mf_payment_completed']) && $form_data['mf_payment_completed'] == '1';
+        $payment_assistant_active = \Metform\Utils\Util::is_plugin_active('metform-payment-assistant/metform-payment-assistant.php');
+
+        // If payment-first request for Stripe or PayPal and the payment assistant is active
+        if ($payment_assistant_active && $is_payment_first && ($selected_payment_method === 'stripe' || $selected_payment_method === 'paypal')) {
+            // Safety check: Ensure form settings exist
+            if (empty($this->form_settings)) {
+                $this->response->status = 0;
+                $this->response->failure_type = 'config';
+                $this->response->error[0] = esc_html__('Form settings not found. Please check form configuration.', 'metform');
+                return $this->response;
+            }
+            
+            // Create temporary entry to get entry_id for payment processing
+            // Using 'auto-draft' status so it won't show in entries list at all
+            $defaults = [
+                'post_title' => '',
+                'post_status' => 'auto-draft',
+                'post_content' => '',
+                'post_type' => $this->post_type,
+            ];
+
+            $this->entry_id = wp_insert_post($defaults);
+
+            if (!is_wp_error($this->entry_id) && $this->entry_id) {
+                update_post_meta($this->entry_id, $this->key_payment_status, 'unpaid');
+                update_post_meta($this->entry_id, $this->key_form_id, $this->form_id);
+                update_post_meta($this->entry_id, 'mf_page_id', $page_id);
+                update_post_meta($this->entry_id, 'mf_payment_pending', '1'); // Flag to hide from entries
+                
+                // Store form data temporarily for PayPal
+                update_post_meta($this->entry_id, 'mf_temp_form_data', $this->form_data);
+            }
+
+            $this->response->status = 1;
+            $this->response->store_entries = '0';
+            $this->response->data['entry_id'] = $this->entry_id;
+            $this->response->data['message'] = isset($this->form_settings['success_message']) ? $this->form_settings['success_message'] : '';
+
+            // Return Stripe payment configuration
+            if ($selected_payment_method === 'stripe' && class_exists('\MetForm_Pro\Core\Integrations\Payment\Stripe')) {
+                $payment_widget_name = $this->get_input_name_by_widget_type('mf-payment-method');
+                $widget = is_array($payment_widget_name) ? current($payment_widget_name) : '';
+
+                $amount_filed = isset($this->fields[$widget]->mf_input_payment_field_name) ? $this->fields[$widget]->mf_input_payment_field_name : '';
+                $amount = isset($this->form_data[$amount_filed]) ? $this->form_data[$amount_filed] : 0;
+                $currency = $this->form_settings['mf_payment_currency'] ?? 'USD';
+
+                $icon_url = !empty($this->form_settings['mf_stripe_image_url']) ? $this->form_settings['mf_stripe_image_url'] : 'https://stripe.com/img/documentation/checkout/marketplace.png';
+
+                $livekey = isset($this->form_settings['mf_stripe_live_publishiable_key']) ? $this->form_settings['mf_stripe_live_publishiable_key'] : '';
+                $livekey_test = isset($this->form_settings['mf_stripe_test_publishiable_key']) ? $this->form_settings['mf_stripe_test_publishiable_key'] : '';
+                $sandbox = isset($this->form_settings['mf_stripe_sandbox']) ? true : false;
+
+                $live_keys = ($sandbox) ? $livekey_test : $livekey;
+
+                $payment['name_post'] = $this->form_settings['form_title'];
+                $payment['description'] = $this->form_id;
+                $payment['amount'] = $amount;
+                $payment['currency_code'] = $currency;
+                $payment['keys'] = $live_keys;
+                $payment['image_url'] = $icon_url;
+                $payment['entry_id'] = $this->entry_id;
+                $payment['form_id'] = $this->form_id;
+                $payment['sandbox'] = $sandbox;
+
+                $this->response->data['payment_data'] = (object) $payment;
+                
+                $rest_url = get_rest_url(null, 'metform/v1/entries/');
+                $this->response->data['ajax_stripe'] = $rest_url . "stripe/pay?entry_id=" . $this->entry_id;
+            }
+            
+            // Return PayPal redirect URL
+            if ($selected_payment_method === 'paypal' && class_exists('\MetForm_Pro\Core\Integrations\Payment\Paypal')) {
+                $rest_url = get_rest_url(null, 'metform/v1/entries/');
+                $this->response->data['redirect_to'] = $rest_url . "paypal/pay?entry_id=" . $this->entry_id;
+                $this->response->data['message'] = $this->form_settings['success_message'] . esc_html__(' Please wait... Redirecting to PayPal.', 'metform');
+            }
+
+            return $this->response;
+        }
+
         if (isset($this->form_settings['store_entries']) && $this->form_settings['store_entries'] == 1) {
 
             $defaults = [
@@ -504,13 +621,85 @@ class Action
                 'post_type' => $this->post_type,
             ];
 
-            $this->entry_id = wp_insert_post($defaults);
+            if ($payment_assistant_active) {
+                // Check if entry already exists (from payment-first flow)
+                $existing_entry_id = isset($form_data['mf_entry_id']) ? intval($form_data['mf_entry_id']) : 0;
+                
+                // Only adopt a caller-supplied entry id if it is genuinely a
+                // payment-pending temporary entry minted by this same payment-first
+                // flow. Without this guard an attacker could pass the id of any
+                // post/page and have store()/insert() overwrite it (IDOR + payment
+                // state forgery). See mint logic ~ line 535-544.
+                $is_valid_pending_entry = false;
+                if ($existing_entry_id) {
+                    $existing_post = get_post($existing_entry_id);
+                    if (
+                        $existing_post
+                        && $existing_post->post_type === $this->post_type
+                        && get_post_meta($existing_entry_id, 'mf_payment_pending', true) == '1'
+                        && (int) get_post_meta($existing_entry_id, $this->key_form_id, true) === (int) $this->form_id
+                    ) {
+                        $is_valid_pending_entry = true;
+                    }
+                }
 
-            update_post_meta($this->entry_id, 'mf_page_id', $page_id);
-            $entry_serial_no = (int) get_option('metform_last_entry_serial_no', 0);
-            $all_data = array_merge($all_data, ['mf_id' => ++$entry_serial_no, 'mf_form_name' => $this->title]);
-            update_option('metform_last_entry_serial_no', $entry_serial_no);
-            update_post_meta($this->entry_id, 'metform_entries_serial_no', $entry_serial_no);
+                // A supplied-but-invalid entry id is a tampering attempt: reject the
+                // submission instead of silently overwriting or creating anything.
+                if ($existing_entry_id && ! $is_valid_pending_entry) {
+                    $this->response->status = 0;
+                    $this->response->failure_type = 'security';
+                    $this->response->error[] = esc_html__('Unauthorized submission.', 'metform');
+                    return $this->response;
+                }
+
+                if ($is_valid_pending_entry) {
+                    // Update existing entry from payment-first flow
+                    $this->entry_id = $existing_entry_id;
+                    
+                    // Change post status from 'auto-draft' to 'draft' to make it visible in entries
+                    wp_update_post([
+                        'ID' => $this->entry_id,
+                        'post_status' => 'draft'
+                    ]);
+                    
+                    // Remove the payment pending flag
+                    delete_post_meta($this->entry_id, 'mf_payment_pending');
+                    
+                    // Get existing serial number
+                    $entry_serial_no = get_post_meta($this->entry_id, 'metform_entries_serial_no', true);
+                    if (!$entry_serial_no) {
+                        $entry_serial_no = (int) get_option('metform_last_entry_serial_no', 0);
+                        $entry_serial_no++;
+                        update_option('metform_last_entry_serial_no', $entry_serial_no);
+                        update_post_meta($this->entry_id, 'metform_entries_serial_no', $entry_serial_no);
+                    }
+                    $all_data = array_merge($all_data, ['mf_id' => $entry_serial_no, 'mf_form_name' => $this->title]);
+                    
+                    // Clean up temporary data
+                    delete_post_meta($this->entry_id, 'mf_temp_form_data');
+                } else {
+                    $this->entry_id = wp_insert_post($defaults);
+
+                    update_post_meta($this->entry_id, 'mf_page_id', $page_id);
+                    $entry_serial_no = (int) get_option('metform_last_entry_serial_no', 0);
+                    $all_data = array_merge($all_data, ['mf_id' => ++$entry_serial_no, 'mf_form_name' => $this->title]);
+                    update_option('metform_last_entry_serial_no', $entry_serial_no);
+                    update_post_meta($this->entry_id, 'metform_entries_serial_no', $entry_serial_no);
+                }
+
+                // If payment was completed via payment-first flow, mark payment status as paid
+                if ($is_payment_completed && in_array($selected_payment_method, ['stripe', 'paypal'], true)) {
+                    update_post_meta($this->entry_id, $this->key_payment_status, 'paid');
+                }
+            } else {
+                $this->entry_id = wp_insert_post($defaults);
+
+                update_post_meta($this->entry_id, 'mf_page_id', $page_id);
+                $entry_serial_no = (int) get_option('metform_last_entry_serial_no', 0);
+                $all_data = array_merge($all_data, ['mf_id' => ++$entry_serial_no, 'mf_form_name' => $this->title]);
+                update_option('metform_last_entry_serial_no', $entry_serial_no);
+                update_post_meta($this->entry_id, 'metform_entries_serial_no', $entry_serial_no);
+            }
         }else{
             $this->response->status = '1';
             $this->response->store_entries = '0';
@@ -541,7 +730,15 @@ class Action
         do_action("metform_after_store_form_data", $form_id, $form_data, $this->form_settings, $attributes);
 
         $this->response->data['redirect_to'] = !empty($this->form_settings['redirect_to']) ? $this->form_settings['redirect_to'] : '';
-        
+
+        // conditional redirect check and action (Pro feature — only runs when Pro is active)
+        if ( class_exists( 'MetForm_Pro\Base\Package' ) ) {
+            $conditional_redirect_url = $this->evaluate_conditional_redirect();
+            if ( $conditional_redirect_url ) {
+                $this->response->data['redirect_to'] = $conditional_redirect_url;
+            }
+        }
+
         $bypass_form_data = json_decode(get_post_meta($form_id, 'mf_redirect_params_status', true));
         
         if($bypass_form_data){
@@ -576,7 +773,7 @@ class Action
             );
             $this->response->status = isset($response['status']) ? $response['status'] : 0;
 
-	        if($this->response->status == 0) $this->response->error = [ esc_html__('Problem with your RestApi integration.', 'metform') ];
+	        if($this->response->status == 0) { $this->response->failure_type = 'integration'; $this->response->error = [ esc_html__('Problem with your RestApi integration.', 'metform') ]; }
         }
 
         // send confirmation email to user
@@ -595,7 +792,7 @@ class Action
 
         $paymet_method = $this->get_input_name_by_widget_type('mf-payment-method');
 
-        if (class_exists('\MetForm_Pro\Core\Integrations\Payment\Paypal') && isset($this->form_settings['mf_paypal']) && isset($this->form_settings['mf_paypal_email']) && ($this->form_settings['mf_paypal_email'] != '') && isset($paymet_method[0]) && ($paymet_method[0] != null)) {
+        if (!$is_payment_completed && class_exists('\MetForm_Pro\Core\Integrations\Payment\Paypal') && isset($this->form_settings['mf_paypal']) && isset($this->form_settings['mf_paypal_email']) && ($this->form_settings['mf_paypal_email'] != '') && isset($paymet_method[0]) && ($paymet_method[0] != null)) {
             if (isset($this->form_data[$paymet_method[0]]) && $this->form_data[$paymet_method[0]] == 'paypal') {
                 update_post_meta($this->entry_id, $this->key_payment_status, 'unpaid');
                 $rest_url = get_rest_url(null, 'metform/v1/entries/');
@@ -608,7 +805,7 @@ class Action
             $paymet_method[0] = null;
         }
 
-        if (class_exists('\MetForm_Pro\Core\Integrations\Payment\Stripe') && ($paymet_method[0] != null)) {
+        if (!$is_payment_completed && class_exists('\MetForm_Pro\Core\Integrations\Payment\Stripe') && ($paymet_method[0] != null)) {
             if (isset($this->form_data[$paymet_method[0]]) && $this->form_data[$paymet_method[0]] == 'stripe') {
                 update_post_meta($this->entry_id, $this->key_payment_status, 'unpaid');
 
@@ -785,6 +982,7 @@ class Action
 
                 $sheet = \MetForm_Pro\Core\Integrations\Google_Sheet\WF_Google_Sheet::instance()->insert($this->form_id, $this->title, $this->form_data, $this->file_upload_info, $this->get_fields($this->form_id), $sheetdata );
                 if($sheet === false) {
+                    $this->response->failure_type = 'integration';
                     $this->response->error[] = esc_html__('ssl certificate or google oauth credentials problem', 'metform');
                     $this->response->status = 0;
                     return $this->response;
@@ -815,6 +1013,7 @@ class Action
                     );
                     
                     if ($drive === false) {
+                        $this->response->failure_type = 'integration';
                         $this->response->error[] = esc_html__('Google Drive upload failed: SSL certificate or OAuth credentials problem', 'metform');
                         $this->response->status = 0;
                         return $this->response;
@@ -945,10 +1144,37 @@ class Action
         $this->response->status = 1;
     }
 
+    /**
+     * Strip CR/LF and null bytes from a value before it is placed inside an
+     * email header block. Without this, a user-supplied field value injected
+     * via a shortcode (e.g. "[mf-email]" in Reply-To) such as
+     * "user@site.com\r\nBcc: victim@site.com" would be parsed by wp_mail() as
+     * an additional header line, allowing arbitrary Bcc/Cc/header injection
+     * (email header / CRLF injection).
+     */
+    private function mf_sanitize_header_field($value)
+    {
+        $value = str_replace("\0", '', (string) $value);
+        // Cut at the first line break instead of just deleting CR/LF chars,
+        // so injected header lines are dropped entirely rather than merged
+        // into the legitimate value (e.g. "a@b.com\r\nbcc: x@y.com" becomes
+        // "a@b.com", not the garbled "a@b.combcc: x@y.com").
+        $value = preg_split("/\r\n|\r|\n/", $value, 2)[0];
+        return trim($value);
+    }
+
     public function send_user_email($form_data, $file_info)
     {
-
-        $user_mail = (isset($form_data[$this->email_name]) ? $form_data[$this->email_name] : null);
+        
+        // get user mail from form data
+        $user_mail = null;
+        $all_email_names = $this->get_input_name_by_widget_type('mf-email') ?? [];
+        foreach ($all_email_names as $_email_key) {
+            if (!empty($form_data[$_email_key])) {
+                $user_mail = $form_data[$_email_key];
+                break;
+            }
+        }
         $subject = isset($this->form_settings['user_email_subject']) ? $this->form_settings['user_email_subject'] : get_bloginfo('name');
         $from = isset($this->form_settings['user_email_from']) ? $this->form_settings['user_email_from'] : null;
         $reply_to = isset($this->form_settings['user_email_reply_to']) ? $this->form_settings['user_email_reply_to'] : null;
@@ -972,6 +1198,13 @@ class Action
 
         $body = apply_filters('metform_confirmation_user_email_body', $body, $this->form_id, $form_data, $file_info, $this->form_settings);
 
+        // Prevent email header (CRLF) injection from user-supplied field values
+        // injected via shortcodes such as [mf-email].
+        $from = $this->mf_sanitize_header_field($from);
+        $reply_to = $this->mf_sanitize_header_field($reply_to);
+        $subject = $this->mf_sanitize_header_field($subject);
+        $user_mail = $this->mf_sanitize_header_field($user_mail);
+
         $headers = 'MIME-Version: 1.0' . "\r\n";
         $headers .= 'Content-type: text/html; charset=UTF-8' . "\r\n";
 
@@ -982,13 +1215,13 @@ class Action
         if (!$user_mail) {
 		if(current_user_can( 'manage_options' )){
 			$this->response->status = 0;
-          	$this->response->error[] = esc_html__('Mail not found.', 'metform');
+          	$this->response->failure_type = 'email'; $this->response->error[] = esc_html__('Mail not found.', 'metform');
 		}
         } else {
 		$status = wp_mail($user_mail, $subject, $body, $headers);
 		if(current_user_can( 'manage_options' )){
 			if(empty($status)){
-				$this->response->error[] = esc_html__('Please setup your SMTP mail server.', 'metform');
+				$this->response->failure_type = 'email'; $this->response->error[] = esc_html__('Please setup your SMTP mail server.', 'metform');
 				$this->response->status = 0;
 			}
 		}
@@ -1019,6 +1252,12 @@ class Action
         }
         $body .= "</body></html>";
 
+        // Prevent email header (CRLF) injection from user-supplied field values
+        // injected via shortcodes such as [mf-email].
+        $from = $this->mf_sanitize_header_field($from);
+        $reply_to = $this->mf_sanitize_header_field($reply_to);
+        $subject = $this->mf_sanitize_header_field($subject);
+
         $headers = 'MIME-Version: 1.0' . "\r\n";
         $headers .= 'Content-type: text/html; charset=UTF-8' . "\r\n";
 
@@ -1031,7 +1270,7 @@ class Action
         if (!$mail) {
 		if(current_user_can( 'manage_options' )){
 			$this->response->status = 0;
-          	$this->response->error[] = esc_html__('Admin mail not found to send email.', 'metform');
+          	$this->response->failure_type = 'email'; $this->response->error[] = esc_html__('Admin mail not found to send email.', 'metform');
 		}
         } else {
 			$admin_email = preg_replace('/\s+/', '', $mail);
@@ -1041,7 +1280,7 @@ class Action
 			}
 			if(current_user_can( 'manage_options' )){
 				if(empty($status)){
-					$this->response->error[] = esc_html__('Please setup your SMTP mail server.', 'metform');
+					$this->response->failure_type = 'email'; $this->response->error[] = esc_html__('Please setup your SMTP mail server.', 'metform');
 					$this->response->status = 0;
 				}
 			}
@@ -1323,6 +1562,80 @@ class Action
     }
 
     /**
+     * Evaluate conditional redirect rules and return the redirect URL if conditions are met.
+     *
+     * @return string|false The redirect URL if conditions are met, or false if not.
+    */
+
+    private function evaluate_conditional_redirect() {
+        $status = get_post_meta( $this->form_id, 'mf_conditional_redirect_status', true );
+
+        if ( $status !== 'true' ) {
+            return false;
+        }
+
+        $rules_json = get_post_meta( $this->form_id, 'mf_conditional_redirect_rules', true );
+
+        if ( empty( $rules_json ) ) {
+            return false;
+        }
+
+        $rules = json_decode( $rules_json, true );
+
+        if ( ! is_array( $rules ) ) {
+            return false;
+        }
+
+        foreach ( $rules as $rule ) {
+            if ( ! is_array( $rule ) ) {
+                continue;
+            }
+
+            $redirect_url = $rule['redirect_url'] ?? '';
+            $conditions   = $rule['conditions']   ?? [];
+
+            if ( empty( $redirect_url ) || ! is_array( $conditions ) || empty( $conditions ) ) {
+                continue;
+            }
+
+            $logic  = $rule['logic'] ?? 'AND';
+            $result = ( $logic === 'OR' ) ? false : true;
+
+            foreach ( $conditions as $condition ) {
+                $field_name  = $condition['field']   ?? '';
+                $compare     = $condition['compare'] ?? '==';
+                $check_value = $condition['value']   ?? '';
+                $form_value  = $this->form_data[ $field_name ] ?? '';
+                $cond_result = $this->mf_compare_values( $form_value, $compare, $check_value );
+
+                if ( $logic === 'OR' ) {
+                    $result = $result || $cond_result;
+                } else {
+                    $result = $result && $cond_result;
+                }
+            }
+
+            if ( $result ) {
+                return esc_url_raw( $redirect_url );
+            }
+        }
+
+        return false;
+    }
+
+    private function mf_compare_values( $actual, $operator, $expected ) {
+        switch ( $operator ) {
+            case '==':  return (string) $actual === (string) $expected;
+            case '!=':  return (string) $actual !== (string) $expected;
+            case '>':   return is_numeric( $actual ) && is_numeric( $expected ) && (float) $actual >  (float) $expected;
+            case '>=':  return is_numeric( $actual ) && is_numeric( $expected ) && (float) $actual >= (float) $expected;
+            case '<':   return is_numeric( $actual ) && is_numeric( $expected ) && (float) $actual <  (float) $expected;
+            case '<=':  return is_numeric( $actual ) && is_numeric( $expected ) && (float) $actual <= (float) $expected;
+            default:    return false;
+        }
+    }
+
+    /**
      * Converting an png image string to png image file.
      *
      * @param $input
@@ -1366,7 +1679,31 @@ class Action
             $this->form_id = $form_id;
         }
         global $wpdb;
-        $entry_count = $wpdb->get_results($wpdb->prepare(" SELECT COUNT( `post_id` )  as `count`  FROM `" . $wpdb->prefix . "postmeta` WHERE `meta_key` LIKE %s AND `meta_value` = %d ",'metform_entries__form_id',$this->form_id), OBJECT);
+
+        $payment_assistant_active = \MetForm\Utils\Util::is_plugin_active('metform-payment-assistant/metform-payment-assistant.php');
+
+        if ($payment_assistant_active) {
+            // Exclude entries with 'auto-draft' status and entries with payment pending flag.
+            // This ensures only completed entries (including those with completed payments) are counted.
+            $entry_count = $wpdb->get_results($wpdb->prepare(
+                "SELECT COUNT(DISTINCT pm.post_id) as `count` 
+                FROM `" . $wpdb->prefix . "postmeta` pm
+                INNER JOIN `" . $wpdb->prefix . "posts` p ON pm.post_id = p.ID
+                LEFT JOIN `" . $wpdb->prefix . "postmeta` pm_pending ON pm.post_id = pm_pending.post_id AND pm_pending.meta_key = 'mf_payment_pending'
+                WHERE pm.meta_key = %s 
+                AND pm.meta_value = %d
+                AND p.post_status != 'auto-draft'
+                AND pm_pending.meta_value IS NULL",
+                'metform_entries__form_id',
+                $this->form_id
+            ), OBJECT);
+        } else {
+            $entry_count = $wpdb->get_results($wpdb->prepare(
+                " SELECT COUNT( `post_id` ) as `count`  FROM `" . $wpdb->prefix . "postmeta` WHERE `meta_key` LIKE %s AND `meta_value` = %d ",
+                'metform_entries__form_id',
+                $this->form_id
+            ), OBJECT);
+        }
 
         $entry_count = $entry_count[0]->count;
 

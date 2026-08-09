@@ -47,6 +47,12 @@ class Cpt extends \MetForm\Base\Cpt
             'redirect_to' => [
                 'name' => 'redirect_to',
             ],
+            'mf_conditional_redirect_status' => [
+                'name' => 'mf_conditional_redirect_status',
+            ],
+            'mf_conditional_redirect_rules' => [
+                'name' => 'mf_conditional_redirect_rules',
+            ],
             'success_url' => [
                 'name' => 'success_url',
             ],
@@ -237,6 +243,9 @@ class Cpt extends \MetForm\Base\Cpt
             ],
             'mf_stripe_test_secret_key' => [
                 'name' => 'mf_stripe_test_secret_key',
+            ],
+            'mf_payment_submit_before_payment' => [
+                'name' => 'mf_payment_submit_before_payment',
             ],
             'mf_google_map_api_key' => [
                 'name' => 'mf_google_map_api_key',
@@ -516,6 +525,15 @@ class Cpt extends \MetForm\Base\Cpt
             ],
             'mf_sms_admin_to' => [
                 'name'  => 'mf_sms_admin_to'
+            ],
+            'mf_enable_form_analytics' => [
+                'name'  => 'mf_enable_form_analytics'  
+            ],
+            'mf_analytics_delete_range' => [
+                'name'  => 'mf_analytics_delete_range'
+            ],
+            'mf_enable_submission_error_log' => [
+                'name'  => 'mf_enable_submission_error_log'
             ]
         ];
 
